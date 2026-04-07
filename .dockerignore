@@ -1,0 +1,8 @@
+# El .dockerignore es clave para optimizar tus builds.
+# No copia ciertos archivos al contenedor cuando haces el build
+# Evita duplicar compilación
+# Reduce el tamaño del contexto
+.gitignore
+target/
+.env
+*.log

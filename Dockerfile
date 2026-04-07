@@ -1,8 +1,82 @@
-# descargar una imagen
-# Multi-stage: 
+# ==========================
+# Etapa 1: BUILD
+# ==========================
+
 FROM maven:3.9.9-eclipse-temurin-17 AS build
+# - Maven 3.9.9: (gestor necesarios para manejar paquetes y la compilación)
+# - Java 17: (Temurin de procesamiento binario, distribución de OpenJDK)
+# - "AS build": nombra esta etapa para reutilizarla después
 
+WORKDIR /app
+# Define el directorio de trabajo dentro del contenedor
 
+COPY pom.xml .
+# Copiar solo el pom.xml al workdir y esto a su vez me permite optimizar la gestión de dependencias
+# Poder utilizar la cache de imágenes al manejarlo de manera separada
+
+RUN mvn -B -q -DskipTests dependency:go-offline 
+# Descargar todas las dependencias que el proyecto necesita
+# -B: modo batch (no interactivo)
+# -q: generar un proceso de ejecución limpio
+# -DskipTests: no ejecuta tests
+# dependency:go-offline: descargar las dependencias y hacer uso de la cache de verificación
+
+COPY src ./src
+# Copia el código duente del proyecto
+
+RUN mvn clean package -DskipTests
+# Compilar mi aplicación y generar mi .jar
+# /app/target/*.jar
+
+# ==========================
+# Etapa 2: RUNTIME (FINAL)
+# ==========================
+
+FROM amazoncorretto:17-alpine-jdk
+# Imagen libera solo para producción y ejecución
+# No incluye Maven -> reduce tamaño y superficie de seguridad
+# Basadas en alpine (muy liviana)
+
+WORKDIR /app
+# Directorio para trabajo en runtime (tiempo de ejecución)
+
+# ==========================
+# Script de espera de BD
+# ==========================
+
+COPY wait-for-db.sh /wait-for-db.sh
+# Copiar el script que espera a que la bdd esté disponible para conexiones
+# Evita que la app falle por arrancar antes que MYSQL
+
+RUN chmod +x /wait-for-db.sh
+# Da permisos de ejecución al script
+
+# ==========================
+# Copiar el JAR
+# ==========================
+
+COPY --from=build /app/target/*.jar app.jar
+# Copiamos solo el artefacto generado desde la etapa del "build"
+# No copia código fuente ni Maven -> imagen más liviana
+# "*.jar", permite flexibilizar el nombre del archivo jar
+
+# ==========================
+# Puerto
+# ==========================
+
+EXPOSE 8080
+# Documenta que mi app escucha en el puerto 8080
+# No abre el puerto, solo lo declara (informativo)
+
+# ==========================
+# ENTRYPOINT
+# ==========================
+
+ENTRYPOINT ["sh", "-c", "\
+    export SPRING_DATASOURCE_USERNAME=$(cat /run/secrets/mysql_user) && \
+    export SPRING_DATASOURCE_PASSWORD=$(cat /run/secrets/mysql_pass) && \
+    exec /wait-for-db.sh mysql 3306 java -jar app.jar \
+"]
 
 
 

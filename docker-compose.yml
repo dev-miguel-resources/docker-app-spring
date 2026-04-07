@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  
+  mysql:
+    image: mysql:8
+    container_name: mysql_db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: /run/secrets/mysql_user
+      MYSQL_PASSWORD: /run/secrets/mysql_pass
+      MYSQL_ROOT_PASSWORD: /run_secrets/mysql_root_pass
+    secrets:
+      - mysql_user
+      - mysql_pass
+      - mysql_root_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - net_spring_app
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p$(cat /run_secrets/mysql_root_pass) || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+networks:
+  net_spring_app:
+    name: net_spring_app
+
+volumes:
+  mysql_data:
+    name: mysql_data
+
+secrets:
+  mysql_user:
+    file: ./secrets/mysql_user.txt
+  mysql_pass:
+    file: ./secrets/mysql_pass.txt
+  mysql_root_pass:
+    file: ./secrets/mysql_root_pass.txt
+
