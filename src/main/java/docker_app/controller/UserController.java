@@ -23,7 +23,7 @@ public class UserController {
     private final UserService userService;
 
     // Rutas http
-    // GET http://localhost:8080/users/1
+    // GET http://localhost:8080/users/
     @GetMapping()
     public List<User> list() {
         return userService.list();

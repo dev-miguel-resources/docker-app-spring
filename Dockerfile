@@ -76,7 +76,9 @@ ENTRYPOINT ["sh", "-c", "\
     export SPRING_DATASOURCE_USERNAME=$(cat /run/secrets/mysql_user) && \
     export SPRING_DATASOURCE_PASSWORD=$(cat /run/secrets/mysql_pass) && \
     exec /wait-for-db.sh mysql 3306 java -jar app.jar \
-"]
+    "]
+
+# Peso final imagen: 355.78 mb
 
 
 
