@@ -1,4 +1,4 @@
-# Dockerfile optimizado 3 + jlink: 161 MB con un 99%
+# Dockerfile optimizado 1 + corretto jdk + 380 mb
 
 # ==========================
 # Etapa 1: BUILD
@@ -31,52 +31,16 @@ RUN mvn clean package -DskipTests
 # /app/target/*.jar
 
 # ==========================
-# JLINK STAGE
+# Etapa 2: RUNTIME (FINAL)
 # ==========================
-FROM eclipse-temurin:17-jdk-alpine AS jre-build
-# Imagen ligera con JDK en Alpine
-# Se usará para cnstruir una JVM (java virtual machine) mínima
 
-RUN apk add --no-cache binutils
-# Instala herramientas necesarias para jlink
-
-# Crear JVM mínima
-RUN $JAVA_HOME/bin/jlink \
-    --add-modules java.base,java.logging,java.sql,java.naming,java.desktop,java.management,java.security.jgss,java.instrument \
-    # Incluye SOLO los módulos necesarios de Java:
-    # - java.base → núcleo de Java
-    # - java.logging → logs
-    # - java.sql → conexión a BD
-    # - java.naming → JNDI
-    # - java.desktop → requerido por algunas libs (ej: fonts, AWT internamente)
-    # - java.management → necesario para Tomcat / monitoreo
-    # - java.security.jgss → evita error GSSException (seguridad/kerberos)
-    # - java.instrument → evita error IllegalClassFormatException (instrumentación)
-    --strip-debug \
-    # Elimina información de depuración → reduce tamaño
-    --no-man-pages \
-    # Elimina páginas de manual
-    --no-header-files \
-    # Elimina archivos de cabecera
-    --compress=2 \
-    # Comprime la JVM → imagen más liviana
-    --output /jre
-# Resultado: JVM personalizada en /jre
-
-# ==========================
-# RUNTIME FINAL
-# ==========================
-FROM alpine:3.21
-#FROM alpine:3.19
+FROM amazoncorretto:17-alpine-jdk
+# Imagen libera solo para producción y ejecución
+# No incluye Maven -> reduce tamaño y superficie de seguridad
+# Basadas en alpine (muy liviana)
 
 WORKDIR /app
-
-# Copiar JVM mínima
-COPY --from=jre-build /jre /opt/jre
-# Copiar la JVM optimizada desde el stage anterior
-
-ENV PATH="/opt/jre/bin:$PATH"
-# Agregar la JVM al PATH -> permite ejecutar "java" desde ese directorio
+# Directorio para trabajo en runtime (tiempo de ejecución)
 
 # ==========================
 # Script de espera de BD
@@ -116,4 +80,15 @@ ENTRYPOINT ["sh", "-c", "\
     exec /wait-for-db.sh mysql 3306 java -jar app.jar \
     "]
 
-# Peso final imagen: 160 mb
+# Peso final imagen: 355.78 mb
+
+
+
+
+
+
+
+
+
+
+

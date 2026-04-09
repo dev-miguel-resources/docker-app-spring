@@ -1,4 +1,4 @@
-# Dockerfile optimizado 3 + jlink: 161 MB con un 99%
+# Dockerfile optimizado 2 + jre + usuario no root: 270 MB 80%
 
 # ==========================
 # Etapa 1: BUILD
@@ -31,52 +31,26 @@ RUN mvn clean package -DskipTests
 # /app/target/*.jar
 
 # ==========================
-# JLINK STAGE
+# Etapa 2: RUNTIME (FINAL)
 # ==========================
-FROM eclipse-temurin:17-jdk-alpine AS jre-build
-# Imagen ligera con JDK en Alpine
-# Se usará para cnstruir una JVM (java virtual machine) mínima
 
-RUN apk add --no-cache binutils
-# Instala herramientas necesarias para jlink
-
-# Crear JVM mínima
-RUN $JAVA_HOME/bin/jlink \
-    --add-modules java.base,java.logging,java.sql,java.naming,java.desktop,java.management,java.security.jgss,java.instrument \
-    # Incluye SOLO los módulos necesarios de Java:
-    # - java.base → núcleo de Java
-    # - java.logging → logs
-    # - java.sql → conexión a BD
-    # - java.naming → JNDI
-    # - java.desktop → requerido por algunas libs (ej: fonts, AWT internamente)
-    # - java.management → necesario para Tomcat / monitoreo
-    # - java.security.jgss → evita error GSSException (seguridad/kerberos)
-    # - java.instrument → evita error IllegalClassFormatException (instrumentación)
-    --strip-debug \
-    # Elimina información de depuración → reduce tamaño
-    --no-man-pages \
-    # Elimina páginas de manual
-    --no-header-files \
-    # Elimina archivos de cabecera
-    --compress=2 \
-    # Comprime la JVM → imagen más liviana
-    --output /jre
-# Resultado: JVM personalizada en /jre
-
-# ==========================
-# RUNTIME FINAL
-# ==========================
-FROM alpine:3.21
-#FROM alpine:3.19
+FROM eclipse-temurin:17-jre-alpine
+# Imagen mejor en tamaño que las coretto jdk alpine
+# Imagen liviana solo para producción y ejecución
+# No incluye Maven -> reduce tamaño y superficie de seguridad
+# Basadas en alpine (muy liviana)
 
 WORKDIR /app
+# Directorio para trabajo en runtime (tiempo de ejecución)
 
-# Copiar JVM mínima
-COPY --from=jre-build /jre /opt/jre
-# Copiar la JVM optimizada desde el stage anterior
-
-ENV PATH="/opt/jre/bin:$PATH"
-# Agregar la JVM al PATH -> permite ejecutar "java" desde ese directorio
+# ==========================
+# Crear un usuario no root
+# ==========================
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Crea un grupo del sistema (appgroup)
+# Crea un usuario del sistema (appuser), no tiene login, ni pass
+# Este usuario no tiene privilegios de administrador (no root)
+# Mejora la seguridad del contenedor
 
 # ==========================
 # Script de espera de BD
@@ -99,6 +73,24 @@ COPY --from=build /app/target/*.jar app.jar
 # "*.jar", permite flexibilizar el nombre del archivo jar
 
 # ==========================
+# Permisos
+# ==========================
+RUN chown -R appuser:appgroup /app /wait-for-db.sh
+# Cambia el dueño de: 
+# -/app donde está el jar
+# - /wait-for-db.sh
+# Ahora el usuario "app-user" puede acceder y ejecutar estos archivos
+# Sin esto -> error de permisos (permission denied)
+
+# ==========================
+# Usuario no root
+# ==========================
+USER appuser
+# A partir de aquí TODO se ejecuta como usuario no root
+# La app ya no tiene permisos o privilegios de administrador
+# Esto reduce el impacto de ataques o vulnerabilidades
+
+# ==========================
 # Puerto
 # ==========================
 
@@ -115,5 +107,3 @@ ENTRYPOINT ["sh", "-c", "\
     export SPRING_DATASOURCE_PASSWORD=$(cat /run/secrets/mysql_pass) && \
     exec /wait-for-db.sh mysql 3306 java -jar app.jar \
     "]
-
-# Peso final imagen: 160 mb
